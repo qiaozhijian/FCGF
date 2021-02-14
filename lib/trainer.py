@@ -44,11 +44,12 @@ class AlignmentTrainer:
             conv1_kernel_size=config.conv1_kernel_size,
             D=3)
 
+        # 是否加载预训练模型
         if config.weights:
             checkpoint = torch.load(config.weights)
             model.load_state_dict(checkpoint['state_dict'])
 
-        logging.info(model)
+        # logging.info(model)
 
         self.config = config
         self.model = model
@@ -176,9 +177,9 @@ class ContrastiveLossTrainer(AlignmentTrainer):
         if val_data_loader is not None:
             assert val_data_loader.batch_size == 1, "Val set batch size must be 1 for now."
         AlignmentTrainer.__init__(self, config, data_loader, val_data_loader)
-        self.neg_thresh = config.neg_thresh
-        self.pos_thresh = config.pos_thresh
-        self.neg_weight = config.neg_weight
+        self.neg_thresh = config.neg_thresh #1.4
+        self.pos_thresh = config.pos_thresh #0.1
+        self.neg_weight = config.neg_weight #1
 
     def apply_transform(self, pts, trans):
         R = trans[:3, :3]
@@ -406,9 +407,9 @@ class HardestContrastiveLossTrainer(ContrastiveLossTrainer):
         N0, N1 = len(F0), len(F1)
         N_pos_pairs = len(positive_pairs)
         hash_seed = max(N0, N1)
-        sel0 = np.random.choice(N0, min(N0, num_hn_samples), replace=False)
+        sel0 = np.random.choice(N0, min(N0, num_hn_samples), replace=False) #replace False 不可以选相同数字
         sel1 = np.random.choice(N1, min(N1, num_hn_samples), replace=False)
-
+        # 随机选正样本对
         if N_pos_pairs > num_pos:
             pos_sel = np.random.choice(N_pos_pairs, num_pos, replace=False)
             sample_pos_pairs = positive_pairs[pos_sel]
@@ -416,6 +417,7 @@ class HardestContrastiveLossTrainer(ContrastiveLossTrainer):
             sample_pos_pairs = positive_pairs
 
         # Find negatives for all F1[positive_pairs[:, 1]]
+        # 随机抽取的一些特征，准备当做负样本对
         subF0, subF1 = F0[sel0], F1[sel1]
 
         pos_ind0 = sample_pos_pairs[:, 0].long()
@@ -424,7 +426,7 @@ class HardestContrastiveLossTrainer(ContrastiveLossTrainer):
 
         D01 = pdist(posF0, subF1, dist_type='L2')
         D10 = pdist(posF1, subF0, dist_type='L2')
-
+        # fixme
         D01min, D01ind = D01.min(1)
         D10min, D10ind = D10.min(1)
 
@@ -432,12 +434,12 @@ class HardestContrastiveLossTrainer(ContrastiveLossTrainer):
             positive_pairs = np.array(positive_pairs, dtype=np.int64)
 
         pos_keys = _hash(positive_pairs, hash_seed)
-
+        # 提取负样本序号
         D01ind = sel1[D01ind.cpu().numpy()]
         D10ind = sel0[D10ind.cpu().numpy()]
         neg_keys0 = _hash([pos_ind0.numpy(), D01ind], hash_seed)
         neg_keys1 = _hash([D10ind, pos_ind1.numpy()], hash_seed)
-
+        # 获得负样本中本属于正样本的部分（因为刚刚负样本是随机抽取的，所以可能抽到正样本）
         mask0 = torch.from_numpy(
             np.logical_not(np.isin(neg_keys0, pos_keys, assume_unique=False)))
         mask1 = torch.from_numpy(
@@ -455,7 +457,8 @@ class HardestContrastiveLossTrainer(ContrastiveLossTrainer):
         total_num = 0.0
         data_loader = self.data_loader
         data_loader_iter = self.data_loader.__iter__()
-        iter_size = self.iter_size
+        iter_size = self.iter_size #1
+        # data_timer数据加载的时间
         data_meter, data_timer, total_timer = AverageMeter(), Timer(), Timer()
         start_iter = (epoch - 1) * (len(data_loader) // iter_size)
         for curr_iter in range(len(data_loader) // iter_size):
@@ -485,7 +488,9 @@ class HardestContrastiveLossTrainer(ContrastiveLossTrainer):
                     F0,
                     F1,
                     pos_pairs,
+                    # num_pos_per_batch 1024
                     num_pos=self.config.num_pos_per_batch * self.config.batch_size,
+                    # num_hn_samples_per_batch 256
                     num_hn_samples=self.config.num_hn_samples_per_batch *
                                    self.config.batch_size)
 

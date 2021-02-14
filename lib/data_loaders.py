@@ -47,7 +47,7 @@ def collate_pair_fn(list_data):
         xyz_batch1.append(to_tensor(xyz1[batch_id]))
 
         trans_batch.append(to_tensor(trans[batch_id]))
-
+        # 因为一个batch里稀疏张量连在一起，所以要给匹配关系定个阶层
         matching_inds_batch.append(
             torch.from_numpy(np.array(matching_inds[batch_id]) + curr_start_inds))
         len_batch.append([N0, N1])
@@ -184,7 +184,7 @@ class ThreeDMatchTestDataset(PairDataset):
 
 
 class IndoorPairDataset(PairDataset):
-    OVERLAP_RATIO = None
+    OVERLAP_RATIO = None #default: 0.3
     AUGMENT = None
 
     def __init__(self,
@@ -196,10 +196,11 @@ class IndoorPairDataset(PairDataset):
                  config=None):
         PairDataset.__init__(self, phase, transform, random_rotation, random_scale,
                              manual_seed, config)
-        self.root = root = config.threed_match_dir
+        self.root = root = config.threed_match_dir #dataset/3dmatch-train
         logging.info(f"Loading the subset {phase} from {root}")
 
         subset_names = open(self.DATA_FILES[phase]).read().split()
+        # 把配准点云对都存入self.files
         for name in subset_names:
             fname = name + "*%.2f.txt" % self.OVERLAP_RATIO
             fnames_txt = glob.glob(root + "/" + fname)
@@ -216,11 +217,12 @@ class IndoorPairDataset(PairDataset):
         file1 = os.path.join(self.root, self.files[idx][1])
         data0 = np.load(file0)
         data1 = np.load(file1)
-        xyz0 = data0["pcd"]
+        # 这俩点云读进来是可以拼在一起的，只不过都只是完整点云的一部分
+        xyz0 = data0["pcd"]#50万左右个点
         xyz1 = data1["pcd"]
-        color0 = data0["color"]
+        color0 = data0["color"]#每个点都有它自己的颜色，且不一样
         color1 = data1["color"]
-        matching_search_voxel_size = self.matching_search_voxel_size
+        matching_search_voxel_size = self.matching_search_voxel_size #0.0375
 
         if self.random_scale and random.random() < 0.95:
             scale = self.min_scale + \
@@ -230,8 +232,9 @@ class IndoorPairDataset(PairDataset):
             xyz1 = scale * xyz1
 
         if self.random_rotation:
-            T0 = sample_random_trans(xyz0, self.randg, self.rotation_range)
+            T0 = sample_random_trans(xyz0, self.randg, self.rotation_range) #rotation_range:360 且旋转平移之后的点云中心坐标为0
             T1 = sample_random_trans(xyz1, self.randg, self.rotation_range)
+            # xyz0到xyz1的相对位姿
             trans = T1 @ np.linalg.inv(T0)
 
             xyz0 = self.apply_transform(xyz0, T0)
@@ -239,23 +242,23 @@ class IndoorPairDataset(PairDataset):
         else:
             trans = np.identity(4)
 
-        # Voxelization
+        # Voxelization voxel_size 0.025
         _, sel0 = ME.utils.sparse_quantize(xyz0 / self.voxel_size, return_index=True)
         _, sel1 = ME.utils.sparse_quantize(xyz1 / self.voxel_size, return_index=True)
 
-        # Make point clouds using voxelized points
+        # 用稀疏点云生成pcd
         pcd0 = make_open3d_point_cloud(xyz0)
         pcd1 = make_open3d_point_cloud(xyz1)
-
         # Select features and points using the returned voxelized indices
         pcd0.colors = o3d.utility.Vector3dVector(color0[sel0])
         pcd1.colors = o3d.utility.Vector3dVector(color1[sel1])
         pcd0.points = o3d.utility.Vector3dVector(np.array(pcd0.points)[sel0])
         pcd1.points = o3d.utility.Vector3dVector(np.array(pcd1.points)[sel1])
         # Get matches
+        # matches包含了点云1的每一点在点云二的（一定范围内的 #0.0375）匹配点
         matches = get_matching_indices(pcd0, pcd1, trans, matching_search_voxel_size)
 
-        # Get features
+        # Get features,特征都为1
         npts0 = len(pcd0.colors)
         npts1 = len(pcd1.colors)
 
@@ -278,6 +281,7 @@ class IndoorPairDataset(PairDataset):
             coords0, feats0 = self.transform(coords0, feats0)
             coords1, feats1 = self.transform(coords1, feats1)
 
+        # 返回体素化之后的np点云，稀疏点云坐标、特征，匹配关系，真实旋转平移
         return (xyz0, xyz1, coords0, coords1, feats0, feats1, matches, trans)
 
 
@@ -635,10 +639,11 @@ class ThreeDMatchPairDataset(IndoorPairDataset):
 ALL_DATASETS = [ThreeDMatchPairDataset, KITTIPairDataset, KITTINMPairDataset]
 dataset_str_mapping = {d.__name__: d for d in ALL_DATASETS}
 
-
+# batch default: 3
 def make_data_loader(config, phase, batch_size, num_threads=0, shuffle=None):
     assert phase in ['train', 'trainval', 'val', 'test']
     if shuffle is None:
+        # 如果是训练则默认打乱
         shuffle = phase != 'test'
 
     if config.dataset not in dataset_str_mapping.keys():
@@ -651,8 +656,8 @@ def make_data_loader(config, phase, batch_size, num_threads=0, shuffle=None):
     use_random_rotation = False
     transforms = []
     if phase in ['train', 'trainval']:
-        use_random_rotation = config.use_random_rotation
-        use_random_scale = config.use_random_scale
+        use_random_rotation = config.use_random_rotation #True
+        use_random_scale = config.use_random_scale #False
         transforms += [t.Jitter()]
 
     dset = Dataset(

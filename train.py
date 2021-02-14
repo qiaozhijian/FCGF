@@ -42,7 +42,7 @@ def main(config, resume=False):
         config.train_phase,
         config.batch_size,
         num_threads=config.train_num_thread)
-
+    # default: False
     if config.test_valid:
         val_loader = make_data_loader(
             config,
@@ -65,7 +65,7 @@ def main(config, resume=False):
 if __name__ == "__main__":
     logger = logging.getLogger()
     config = get_config()
-
+    # model: ResUNetBN2C trainer:'HardestContrastiveLossTrainer'
     dconfig = vars(config)
     if config.resume_dir:
         resume_config = json.load(open(config.resume_dir + '/config.json', 'r'))
