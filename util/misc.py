@@ -80,7 +80,11 @@ def extract_features(model,
     coords = np.floor(xyz / voxel_size)
 
     coords, inds = ME.utils.sparse_quantize(coords, return_index=True)
+    # Voxelize xyz and feats
 
+
+    coords = np.floor(xyz / voxel_size)
+    coords, inds = ME.utils.sparse_quantize(coords, return_index=True)
     # Convert to batched coords compatible with ME
     coords = ME.utils.batched_coordinates([coords])
     return_coords = xyz[inds]
