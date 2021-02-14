@@ -8,3 +8,5 @@ outputs/
 *.pyc
 *.ply
 *.pth
+dataset
+features_tmp

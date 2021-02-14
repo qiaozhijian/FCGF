@@ -5,13 +5,13 @@ parser = argparse.ArgumentParser()
 
 
 def add_argument_group(name):
-  arg = parser.add_argument_group(name)
-  arg_lists.append(arg)
-  return arg
+    arg = parser.add_argument_group(name)
+    arg_lists.append(arg)
+    return arg
 
 
 def str2bool(v):
-  return v.lower() in ('true', '1')
+    return v.lower() in ('true', '1')
 
 
 logging_arg = add_argument_group('Logging')
@@ -20,7 +20,7 @@ logging_arg.add_argument('--out_dir', type=str, default='outputs')
 trainer_arg = add_argument_group('Trainer')
 trainer_arg.add_argument('--trainer', type=str, default='HardestContrastiveLossTrainer')
 trainer_arg.add_argument('--save_freq_epoch', type=int, default=1)
-trainer_arg.add_argument('--batch_size', type=int, default=4)
+trainer_arg.add_argument('--batch_size', type=int, default=3)
 trainer_arg.add_argument('--val_batch_size', type=int, default=1)
 
 # Hard negative mining
@@ -121,5 +121,5 @@ data_arg.add_argument('--kitti_date', type=str, default='2011_09_26')
 
 
 def get_config():
-  args = parser.parse_args()
-  return args
+    args = parser.parse_args()
+    return args
